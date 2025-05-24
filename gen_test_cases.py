@@ -20,8 +20,8 @@ if __name__ == "__main__":
         params = {
             "match_score": random.randint(1, 5),
             "mismatch_penalty": -random.randint(1, 3),
-            "open_penalty": -random.randint(3, 5),
-            "extend_penalty": -random.randint(1, 3),
+            "open_penalty": -random.randint(5, 7),
+            "extend_penalty": -random.randint(1, 5),
         }
         test_case = {
             "seq1": seq1,
