@@ -11,11 +11,6 @@ def get_seq_from_fasta(path):
     with open(path, "r") as f:
         return str(next(SeqIO.parse(f, "fasta")).seq)
 
-
-def smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
-    return ("---", "---", 0)
-
-
 # заполнение матрицы Нидлман
 def needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
     len1, len2 = len(seq1), len(seq2)
@@ -44,7 +39,7 @@ def needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
     )
     return align1, align2, score
 
-def smith_waterman_matrix(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
+def smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
     len1, len2 = len(seq1), len(seq2)
     matrix = np.zeros((len2 + 1, len1 + 1), dtype=int)
     
