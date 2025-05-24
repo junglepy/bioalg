@@ -11,33 +11,54 @@ def get_seq_from_fasta(path):
     with open(path, "r") as f:
         return str(next(SeqIO.parse(f, "fasta")).seq)
 
-# заполнение матрицы Нидлман
-def needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
+def needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty, gap_extend_penalty):
     len1, len2 = len(seq1), len(seq2)
-    # создаем матрицу
-    matrix = np.zeros((len2 + 1, len1 + 1), dtype=int)
-    # инициализируем 1 строку и 1 столбец
-    for i in range(len2 + 1):
-        matrix[i][0] = i * gap_penalty
-    for i in range(len1 + 1):
-        matrix[0][i] = i * gap_penalty
 
-    # заполнение матрицы
+    # Основная матрица очков
+    score = np.zeros((len2 + 1, len1 + 1), dtype=int)
+    # Матрицы для хранения информации о продолжении гэпа
+    gapA = np.zeros((len2 + 1, len1 + 1), dtype=bool)
+    gapB = np.zeros((len2 + 1, len1 + 1), dtype=bool)
+
+    # Инициализация первой строки и столбца
+    for i in range(1, len2 + 1):
+        score[i][0] = gap_penalty + (i - 1) * gap_extend_penalty
+        gapA[i][0] = True  # гэп в первой последовательности
+
+    for j in range(1, len1 + 1):
+        score[0][j] = gap_penalty + (j - 1) * gap_extend_penalty
+        gapB[0][j] = True  # гэп во второй последовательности
+
+    # Заполнение матрицы
     for i in range(1, len2 + 1):
         for j in range(1, len1 + 1):
             if seq1[j - 1] == seq2[i - 1]:
-                score_diag = matrix[i - 1][j - 1] + match_score
+                match = match_score
             else:
-                score_diag = matrix[i - 1][j - 1] + mismatch_penalty
+                match = mismatch_penalty
 
-            score_up = matrix[i - 1][j] + gap_penalty
-            score_left = matrix[i][j - 1] + gap_penalty
+            score_diag = score[i - 1][j - 1] + match
 
-            matrix[i][j] = max(score_diag, score_up, score_left)
-    align1, align2, score = needleman_perform_traceback(
-        seq1, seq2, matrix, match_score, mismatch_penalty, gap_penalty
+            # Гэп в seq1 (вертикальный)
+            if gapA[i - 1][j]:
+                score_up = score[i - 1][j] + gap_extend_penalty
+            else:
+                score_up = score[i - 1][j] + gap_penalty
+            # Гэп в seq2 (горизонтальный)
+            if gapB[i][j - 1]:
+                score_left = score[i][j - 1] + gap_extend_penalty
+            else:
+                score_left = score[i][j - 1] + gap_penalty
+
+            best = max(score_diag, score_up, score_left)
+            score[i][j] = best
+            gapA[i][j] = best == score_up
+            gapB[i][j] = best == score_left
+
+    align1, align2, final_score = needleman_perform_traceback_affine(
+        seq1, seq2, score, match_score, mismatch_penalty, gap_penalty, gap_extend_penalty
     )
-    return align1, align2, score
+    return align1, align2, final_score
 
 def smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
     len1, len2 = len(seq1), len(seq2)
@@ -101,40 +122,45 @@ def waterman_perform_traceback(
     return "".join(aligned_seq1[::-1]), "".join(aligned_seq2[::-1]), max_score
 
 
-def needleman_perform_traceback(
-    seq1: str,
-    seq2: str,
-    score_matrix: np.ndarray,
-    match_score: int,
-    mismatch_penalty: int,
-    gap_penalty: int,
-) -> tuple[str, str, int]:
-
-    i, j = len(seq1), len(seq2)
+def needleman_perform_traceback_affine(seq1, seq2, score_matrix, match_score, mismatch_penalty, gap_open_penalty, gap_extend_penalty):
+    i, j = len(seq2), len(seq1)
     aligned_seq1 = []
     aligned_seq2 = []
-    final_score = score_matrix[i][j]
 
     while i > 0 or j > 0:
-        symb_seq1 = seq1[i - 1] if i > 0 else "-"
-        symb_seq2 = seq2[j - 1] if j > 0 else "-"
-        char_score = match_score if symb_seq1 == symb_seq2 else mismatch_penalty
+        current_score = score_matrix[i][j]
+        if i > 0 and j > 0:
+            char1 = seq1[j - 1]
+            char2 = seq2[i - 1]
+            match = match_score if char1 == char2 else mismatch_penalty
+            if current_score == score_matrix[i - 1][j - 1] + match:
+                aligned_seq1.append(char1)
+                aligned_seq2.append(char2)
+                i -= 1
+                j -= 1
+                continue
 
-        if i > 0 and j > 0 and score_matrix[i][j] == score_matrix[i - 1][j - 1] + char_score:
-            i -= 1
-            j -= 1
-            aligned_seq1.append(symb_seq1)
-            aligned_seq2.append(symb_seq2)
-        elif i > 0 and score_matrix[i][j] == score_matrix[i - 1][j] + gap_penalty:
-            i -= 1
-            aligned_seq1.append(symb_seq1)
-            aligned_seq2.append("-")
-        else:
-            j -= 1
-            aligned_seq1.append("-")
-            aligned_seq2.append(symb_seq2)
+        if i > 0:
+            # Гэп в seq1
+            gap = gap_extend_penalty if i >= 2 and score_matrix[i][j] == score_matrix[i - 1][j] + gap_extend_penalty else gap_open_penalty
+            if current_score == score_matrix[i - 1][j] + gap:
+                aligned_seq1.append("-")
+                aligned_seq2.append(seq2[i - 1])
+                i -= 1
+                continue
 
-    return "".join(aligned_seq1[::-1]), "".join(aligned_seq2[::-1]), final_score
+        if j > 0:
+            # Гэп в seq2
+            gap = gap_extend_penalty if j >= 2 and score_matrix[i][j] == score_matrix[i][j - 1] + gap_extend_penalty else gap_open_penalty
+            if current_score == score_matrix[i][j - 1] + gap:
+                aligned_seq1.append(seq1[j - 1])
+                aligned_seq2.append("-")
+                j -= 1
+                continue
+
+        break
+
+    return "".join(aligned_seq1[::-1]), "".join(aligned_seq2[::-1]), score_matrix[len(seq2)][len(seq1)]
 
 
 def print_alignment(align1, align2, score):
