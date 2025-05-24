@@ -44,6 +44,23 @@ def needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
     )
     return align1, align2, score
 
+def smith_waterman_matrix(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
+    len1, len2 = len(seq1), len(seq2)
+    matrix = np.zeros((len2 + 1, len1 + 1), dtype=int)
+    
+    for i in range(1, len2 + 1):
+        for j in range(1, len1 + 1):
+            if seq1[j-1] == seq2[i-1]:
+                diag = matrix[i-1][j-1] + match_score
+            else:
+                diag = matrix[i-1][j-1] + mismatch_penalty
+            
+            up = matrix[i-1][j] + gap_penalty
+            left = matrix[i][j-1] + gap_penalty
+            
+            matrix[i][j] = max(diag, up, left, 0)
+    return matrix
+
 
 def waterman_perform_traceback(
     seq1: str,
@@ -149,16 +166,14 @@ if __name__ == "__main__":
 
     # Запуск нужного алгоритма
     if args.method == "nw":
-        result = needleman_wunsch(
-            seq1, seq2, match_score, mismatch_penalty, gap_penalty
-        )
+        align1, align2, score = needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty)
     elif args.method == "sw":
-        result = smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty)
+        align1, align2, score = smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty)
 
-    # Вывод
     if args.output:
         with open(args.output, "w") as f:
-            f.write(result)
-        print(result)
+            f.write(f"{align1}\n{align2}\nScore: {score}\n")
+        print_alignment(align1, align2, score)
     else:
-        print(result)
+        print_alignment(align1, align2, score)
+
