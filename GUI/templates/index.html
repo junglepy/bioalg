@@ -1,0 +1,17 @@
+<!doctype html>
+<html>
+<head>
+  <title>Сложение +1</title>
+</head>
+<body>
+  <h1>Сложение: число +1</h1>
+  <form method="post">
+    <label>Введите число:</label><br>
+    <input type="text" name="number"><br><br>
+    <input type="submit" value="Прибавить 1">
+  </form>
+  {% if result is not none %}
+    <h2>Результат: {{ result }}</h2>
+  {% endif %}
+</body>
+</html>
