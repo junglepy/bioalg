@@ -59,7 +59,10 @@ def smith_waterman_matrix(seq1, seq2, match_score, mismatch_penalty, gap_penalty
             left = matrix[i][j-1] + gap_penalty
             
             matrix[i][j] = max(diag, up, left, 0)
-    return matrix
+    align1, align2, score = waterman_perform_traceback(
+        seq1, seq2, matrix, match_score, mismatch_penalty, gap_penalty
+    )
+    return align1, align2, score
 
 
 def waterman_perform_traceback(
