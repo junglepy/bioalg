@@ -11,63 +11,149 @@ def get_seq_from_fasta(path):
     with open(path, "r") as f:
         return str(next(SeqIO.parse(f, "fasta")).seq)
 
-def needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty):
-    len1, len2 = len(seq1), len(seq2)
-    matrix = np.zeros((len2 + 1, len1 + 1), dtype=int)
-    for i in range(len2 + 1):
-        matrix[i][0] = i * gap_penalty
-    for i in range(len1 + 1):
-        matrix[0][i] = i * gap_penalty
 
+def needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, open_penalty, extend_penalty):
+    len1, len2 = len(seq1), len(seq2)
+    
+    M = np.zeros((len2 + 1, len1 + 1), dtype=float)
+    Ix = np.full((len2 + 1, len1 + 1), float('-inf'), dtype=float)
+    Iy = np.full((len2 + 1, len1 + 1), float('-inf'), dtype=float)
+    
+    Ix[0][0] = Iy[0][0] = 0
+    
+    for i in range(1, len2 + 1):
+        Ix[i][0] = open_penalty + (i - 1) * extend_penalty
+        M[i][0] = Ix[i][0]
+        
+    for j in range(1, len1 + 1):
+        Iy[0][j] = open_penalty + (j - 1) * extend_penalty
+        M[0][j] = Iy[0][j]
+    
     for i in range(1, len2 + 1):
         for j in range(1, len1 + 1):
-            if seq1[j - 1] == seq2[i - 1]:
-                score_diag = matrix[i - 1][j - 1] + match_score
+            if seq1[j-1] == seq2[i-1]:
+                score = match_score
             else:
-                score_diag = matrix[i - 1][j - 1] + mismatch_penalty
-
-            score_up = matrix[i - 1][j] + gap_penalty
-            score_left = matrix[i][j - 1] + gap_penalty
-
-            matrix[i][j] = max(score_diag, score_up, score_left)
-    align1, align2, score = needleman_perform_traceback(
-        seq1, seq2, matrix, match_score, mismatch_penalty, gap_penalty
+                score = mismatch_penalty
+            
+            M[i][j] = max(
+                M[i-1][j-1] + score,
+                Ix[i-1][j-1] + score,
+                Iy[i-1][j-1] + score
+            )
+            
+            Ix[i][j] = max(
+                M[i-1][j] + open_penalty,
+                Ix[i-1][j] + extend_penalty
+            )
+            
+            Iy[i][j] = max(
+                M[i][j-1] + open_penalty,
+                Iy[i][j-1] + extend_penalty
+            )
+    
+    align1, align2, score = needleman_perform_traceback_affine(
+        seq1, seq2, M, Ix, Iy, match_score, mismatch_penalty, open_penalty, extend_penalty
     )
-    return align1, align2, score
+    return align1, align2, int(score)
 
-def needleman_perform_traceback(
+
+def needleman_perform_traceback_affine(
     seq1: str,
     seq2: str,
-    score_matrix: np.ndarray,
+    M: np.ndarray,
+    Ix: np.ndarray,
+    Iy: np.ndarray,
     match_score: int,
     mismatch_penalty: int,
-    gap_penalty: int,
-) -> tuple[str, str, int]:
-
-    i, j = len(seq1), len(seq2)
+    open_penalty: int,
+    extend_penalty: int,
+) -> tuple[str, str, float]:
+    
+    i, j = len(seq2), len(seq1)
+    
+    final_score = max(M[i][j], Ix[i][j], Iy[i][j])
+    
+    if final_score == M[i][j]:
+        state = 'M'
+    elif final_score == Ix[i][j]:
+        state = 'Ix'
+    else:
+        state = 'Iy'
+    
     aligned_seq1 = []
     aligned_seq2 = []
-    final_score = score_matrix[i][j]
-
+    
     while i > 0 or j > 0:
-        symb_seq1 = seq1[i - 1] if i > 0 else "-"
-        symb_seq2 = seq2[j - 1] if j > 0 else "-"
-        char_score = match_score if symb_seq1 == symb_seq2 else mismatch_penalty
-
-        if i > 0 and j > 0 and score_matrix[i][j] == score_matrix[i - 1][j - 1] + char_score:
-            i -= 1
-            j -= 1
-            aligned_seq1.append(symb_seq1)
-            aligned_seq2.append(symb_seq2)
-        elif i > 0 and score_matrix[i][j] == score_matrix[i - 1][j] + gap_penalty:
-            i -= 1
-            aligned_seq1.append(symb_seq1)
-            aligned_seq2.append("-")
-        else:
-            j -= 1
-            aligned_seq1.append("-")
-            aligned_seq2.append(symb_seq2)
-
+        if state == 'M':
+            if i > 0 and j > 0:
+                symb_seq1 = seq1[j - 1]
+                symb_seq2 = seq2[i - 1]
+                aligned_seq1.append(symb_seq1)
+                aligned_seq2.append(symb_seq2)
+                
+                score = match_score if symb_seq1 == symb_seq2 else mismatch_penalty
+                
+                prev_M = M[i-1][j-1] + score if i > 0 and j > 0 else float('-inf')
+                prev_Ix = Ix[i-1][j-1] + score if i > 0 and j > 0 else float('-inf')
+                prev_Iy = Iy[i-1][j-1] + score if i > 0 and j > 0 else float('-inf')
+                
+                if abs(M[i][j] - prev_M) < 1e-9:
+                    state = 'M'
+                elif abs(M[i][j] - prev_Ix) < 1e-9:
+                    state = 'Ix'
+                elif abs(M[i][j] - prev_Iy) < 1e-9:
+                    state = 'Iy'
+                else:
+                    state = 'M'
+                
+                i -= 1
+                j -= 1
+            elif i > 0:
+                aligned_seq1.append('-')
+                aligned_seq2.append(seq2[i-1])
+                i -= 1
+                state = 'Ix'
+            else:
+                aligned_seq1.append(seq1[j-1])
+                aligned_seq2.append('-')
+                j -= 1
+                state = 'Iy'
+                
+        elif state == 'Ix':
+            if i > 0:
+                aligned_seq1.append('-')
+                aligned_seq2.append(seq2[i-1])
+                
+                prev_M = M[i-1][j] + open_penalty if i > 0 else float('-inf')
+                prev_Ix = Ix[i-1][j] + extend_penalty if i > 0 else float('-inf')
+                
+                if abs(Ix[i][j] - prev_M) < 1e-9:
+                    state = 'M'
+                else:
+                    state = 'Ix'
+                
+                i -= 1
+            else:
+                state = 'Iy'
+                
+        elif state == 'Iy':
+            if j > 0:
+                aligned_seq1.append(seq1[j-1])
+                aligned_seq2.append('-')
+                
+                prev_M = M[i][j-1] + open_penalty if j > 0 else float('-inf')
+                prev_Iy = Iy[i][j-1] + extend_penalty if j > 0 else float('-inf')
+                
+                if abs(Iy[i][j] - prev_M) < 1e-9:
+                    state = 'M'
+                else:
+                    state = 'Iy'
+                
+                j -= 1
+            else:
+                state = 'Ix'
+    
     return "".join(aligned_seq1[::-1]), "".join(aligned_seq2[::-1]), final_score
 
 
@@ -278,6 +364,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--gap", type=int, metavar=("gap_penalty"), help="Input gap penalty"
     )
+    parser.add_argument(
+        "--extend", type=int, metavar=("gap_extend_penalty"), help="Input gap extend penalty"
+    )
     parser.add_argument("--output", type=str, help="Output file to save result")
 
     args = parser.parse_args()
@@ -304,9 +393,9 @@ if __name__ == "__main__":
 
 
     if args.method == "nw":
-        align1, align2, score = needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty)
+        align1, align2, score = needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty, args.extend)
     elif args.method == "sw":
-        align1, align2, score = smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty)
+        align1, align2, score = smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty, args.extend)
 
     if args.output:
         with open(args.output, "w") as f:
