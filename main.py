@@ -109,6 +109,19 @@ def needleman_perform_traceback(
 ) -> tuple[str, str]:
     return
 
+def print_alignment(align1, align2, score):
+    match_line = []
+    for a, b in zip(align1, align2):
+        if a == b:
+            match_line.append('|')
+        elif a == '-' or b == '-':
+            match_line.append(' ')
+        else:
+            match_line.append('*')
+    print(align1)
+    print(''.join(match_line))
+    print(align2)
+    print(f"Alignment score: {score}")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Sequence alignment tool")
@@ -167,20 +180,6 @@ if __name__ == "__main__":
         align1, align2, score = needleman_wunsch(seq1, seq2, match_score, mismatch_penalty, gap_penalty)
     elif args.method == "sw":
         align1, align2, score = smith_waterman(seq1, seq2, match_score, mismatch_penalty, gap_penalty)
-        
-    def print_alignment(align1, align2, score):
-        match_line = []
-        for a, b in zip(align1, align2):
-            if a == b:
-                match_line.append('|')
-            elif a == '-' or b == '-':
-                match_line.append(' ')
-            else:
-                match_line.append('*')
-        print(align1)
-        print(''.join(match_line))
-        print(align2)
-        print(f"Alignment score: {score}")
 
     if args.output:
         with open(args.output, "w") as f:
